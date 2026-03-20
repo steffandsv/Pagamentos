@@ -14,13 +14,13 @@ jobs:
 
       - name: Create .env file from secrets
         run: |
-          cat << EOF > .env
+          cat > .env << 'ENVEOF'
           DB_HOST=${{ secrets.DB_HOST }}
           DB_USER=${{ secrets.DB_USER }}
           DB_NAME=${{ secrets.DB_NAME }}
           DB_PASS=${{ secrets.DB_PASS }}
           APP_PORT=${{ secrets.APP_PORT }}
-          EOF
+          ENVEOF
 
       - name: Install sshpass
         run: sudo apt-get update && sudo apt-get install -y sshpass
@@ -32,45 +32,51 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PASS: ${{ secrets.SSH_PASS }}
         run: |
-          # Disable strict host key checking
           export SSHPASS="$SSH_PASS"
-          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT"
-          
-          # Create remote directory if it doesn't exist
-          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "echo '$SSH_PASS' | sudo -S mkdir -p /opt/pagamentos"
-          
-          # Sync files to remote server (upload to /tmp first, then sudo mv)
-          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "mkdir -p /tmp/pagamentos-deploy/views /tmp/pagamentos-deploy/assets"
-          
-          sshpass -e scp $SSH_OPTS -r \
-            package.json package-lock.json \
+          SSH_CMD="sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT $SSH_USER@$SSH_HOST"
+          SCP_CMD="sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P $SSH_PORT"
+
+          # Create temp deploy dir on remote
+          $SSH_CMD "mkdir -p /tmp/pagamentos-deploy/views /tmp/pagamentos-deploy/assets"
+
+          # Upload application files
+          $SCP_CMD \
+            package.json \
             server.js helpers.js geo.js intelligence.js ncm.js \
             Dockerfile .dockerignore .env \
             $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/
-          
-          sshpass -e scp $SSH_OPTS views/*.ejs $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/views/
-          sshpass -e scp $SSH_OPTS assets/style.css $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/assets/
-          
-          # Sync data files (ncm.json, municipios cache)
-          sshpass -e scp $SSH_OPTS \
-            ncm.json municipios_ibge_cache.json \
-            $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/
-          
-          # Move files to /opt and build/run Docker container
-          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "SUDO_PASS='$SSH_PASS' && \
-            echo \"\$SUDO_PASS\" | sudo -S cp -rf /tmp/pagamentos-deploy/* /opt/pagamentos/ && \
-            rm -rf /tmp/pagamentos-deploy && \
-            cd /opt/pagamentos && \
-            echo \"\$SUDO_PASS\" | sudo -S docker stop pagamentos 2>/dev/null; \
-            echo \"\$SUDO_PASS\" | sudo -S docker rm pagamentos 2>/dev/null; \
-            echo \"\$SUDO_PASS\" | sudo -S docker build -t pagamentos . && \
-            echo \"\$SUDO_PASS\" | sudo -S docker run -d \
-              --name pagamentos \
-              --restart unless-stopped \
-              -p 4102:4102 \
-              --env-file .env \
-              pagamentos && \
-            echo \"\$SUDO_PASS\" | sudo -S docker image prune -f"
+
+          # Upload views
+          $SCP_CMD views/*.ejs $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/views/
+
+          # Upload assets
+          $SCP_CMD assets/style.css $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/assets/
+
+          # Upload data files
+          $SCP_CMD ncm.json municipios_ibge_cache.json $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/
+
+          # Write deploy script to remote
+          $SSH_CMD "cat > /tmp/pagamentos-deploy.sh << 'SCRIPT'
+          #!/bin/bash
+          sudo mkdir -p /opt/pagamentos
+          sudo cp -rf /tmp/pagamentos-deploy/* /opt/pagamentos/
+          rm -rf /tmp/pagamentos-deploy /tmp/pagamentos-deploy.sh
+          cd /opt/pagamentos
+          sudo docker stop pagamentos 2>/dev/null || true
+          sudo docker rm pagamentos 2>/dev/null || true
+          sudo docker build -t pagamentos .
+          sudo docker run -d \
+            --name pagamentos \
+            --restart unless-stopped \
+            -p 4102:4102 \
+            --env-file .env \
+            pagamentos
+          sudo docker image prune -f
+          SCRIPT
+          chmod +x /tmp/pagamentos-deploy.sh"
+
+          # Execute deploy script with sudo password piped via stdin
+          printf '%s\n' "$SSH_PASS" | $SSH_CMD "sudo -S bash /tmp/pagamentos-deploy.sh"
 
       - name: Verify deployment
         env:
@@ -81,5 +87,4 @@ jobs:
         run: |
           sleep 5
           export SSHPASS="$SSH_PASS"
-          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT"
-          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "echo '$SSH_PASS' | sudo -S docker ps --filter name=pagamentos --format '{{.Status}}'"
+          printf '%s\n' "$SSH_PASS" | sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT $SSH_USER@$SSH_HOST "sudo -S docker ps --filter name=pagamentos --format '{{.Status}}'"
