@@ -37,7 +37,7 @@ jobs:
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT"
           
           # Create remote directory if it doesn't exist
-          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "sudo mkdir -p /opt/pagamentos"
+          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "echo '$SSH_PASS' | sudo -S mkdir -p /opt/pagamentos"
           
           # Sync files to remote server (upload to /tmp first, then sudo mv)
           sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "mkdir -p /tmp/pagamentos-deploy/views /tmp/pagamentos-deploy/assets"
@@ -57,31 +57,20 @@ jobs:
             $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/
           
           # Move files to /opt and build/run Docker container
-          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST << 'ENDSSH'
-            # Copy deployed files to /opt/pagamentos
-            sudo cp -rf /tmp/pagamentos-deploy/* /opt/pagamentos/
-            rm -rf /tmp/pagamentos-deploy
-            
-            cd /opt/pagamentos
-            
-            # Stop and remove existing container if running
-            sudo docker stop pagamentos 2>/dev/null || true
-            sudo docker rm pagamentos 2>/dev/null || true
-            
-            # Build new image
-            sudo docker build -t pagamentos .
-            
-            # Run new container
-            sudo docker run -d \
+          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "SUDO_PASS='$SSH_PASS' && \
+            echo \"\$SUDO_PASS\" | sudo -S cp -rf /tmp/pagamentos-deploy/* /opt/pagamentos/ && \
+            rm -rf /tmp/pagamentos-deploy && \
+            cd /opt/pagamentos && \
+            echo \"\$SUDO_PASS\" | sudo -S docker stop pagamentos 2>/dev/null; \
+            echo \"\$SUDO_PASS\" | sudo -S docker rm pagamentos 2>/dev/null; \
+            echo \"\$SUDO_PASS\" | sudo -S docker build -t pagamentos . && \
+            echo \"\$SUDO_PASS\" | sudo -S docker run -d \
               --name pagamentos \
               --restart unless-stopped \
               -p 4102:4102 \
               --env-file .env \
-              pagamentos
-            
-            # Cleanup old images
-            sudo docker image prune -f
-          ENDSSH
+              pagamentos && \
+            echo \"\$SUDO_PASS\" | sudo -S docker image prune -f"
 
       - name: Verify deployment
         env:
@@ -93,4 +82,4 @@ jobs:
           sleep 5
           export SSHPASS="$SSH_PASS"
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT"
-          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "sudo docker ps --filter name=pagamentos --format '{{.Status}}'"
+          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "echo '$SSH_PASS' | sudo -S docker ps --filter name=pagamentos --format '{{.Status}}'"
