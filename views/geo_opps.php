@@ -1,0 +1,50 @@
+<?php
+$geo = new GeoIntelligence();
+$topClients = $geo->getTopCustomersLocations($pdo, $whereGlobal, 100);
+?>
+
+<div class="grid">
+    <div class="glass-card col-12">
+        <div class="kpi-label">Mapa de Oportunidades (Top 100 Clientes)</div>
+        <p style="color: var(--text-secondary); margin-bottom: 20px;">
+            Visualização exata da localização dos seus principais clientes.
+        </p>
+        <div id="mapOpps" style="height: 600px; border-radius: 16px;"></div>
+    </div>
+</div>
+
+<script>
+    try {
+        var map = L.map('mapOpps').setView([-15, -55], 4);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 19
+        }).addTo(map);
+
+        const clients = <?= json_encode($topClients) ?>;
+        const markers = [];
+        
+        clients.forEach(c => {
+            if(c.lat && c.lon) {
+                // Custom Icon based on Value? For now standard circle but different color
+                L.circleMarker([c.lat, c.lon], {
+                    radius: Math.min(Math.max(6, Math.sqrt(c.val)/80), 30),
+                    fillColor: "#818cf8",
+                    color: "#fff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map).bindPopup(`
+                    <div style="text-align:center;">
+                        <b>${c.name}</b><br>
+                        ${c.city}<br>
+                        <span style="color:#007aff; font-weight:bold;">R$ ${parseFloat(c.val).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                    </div>
+                `);
+                markers.push([c.lat, c.lon]);
+            }
+        });
+        
+        if(markers.length > 0) map.fitBounds(markers);
+    } catch(e) { console.error("Map Error", e); }
+</script>
