@@ -1,0 +1,16 @@
+<% if(uploadMessage) { %>
+    <div style="padding: 15px; background: rgba(52, 199, 89, 0.1); color: var(--success); border-radius: 12px; margin-bottom: 20px;">
+        <%= uploadMessage %>
+    </div>
+<% } %>
+
+<div class="glass-card">
+    <form method="post" action="/upload" enctype="multipart/form-data">
+        <div class="upload-area" onclick="document.getElementById('f1').click()">
+            <i class="fa-solid fa-file-zipper" style="font-size: 3rem; color: var(--accent); margin-bottom: 20px;"></i>
+            <h3>Clique para selecionar o ZIP de Emissões</h3>
+            <p style="color: var(--text-secondary);">O sistema detectará automaticamente a empresa e os clientes.</p>
+            <input type="file" name="f1" id="f1" style="display: none" onchange="this.form.submit()" required>
+        </div>
+    </form>
+</div>

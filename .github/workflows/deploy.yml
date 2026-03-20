@@ -1,0 +1,96 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env file from secrets
+        run: |
+          cat << EOF > .env
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_PASS=${{ secrets.DB_PASS }}
+          APP_PORT=${{ secrets.APP_PORT }}
+          EOF
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Deploy via SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASS: ${{ secrets.SSH_PASS }}
+        run: |
+          # Disable strict host key checking
+          export SSHPASS="$SSH_PASS"
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT"
+          
+          # Create remote directory if it doesn't exist
+          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "sudo mkdir -p /opt/pagamentos"
+          
+          # Sync files to remote server (upload to /tmp first, then sudo mv)
+          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "mkdir -p /tmp/pagamentos-deploy/views /tmp/pagamentos-deploy/assets"
+          
+          sshpass -e scp $SSH_OPTS -r \
+            package.json package-lock.json \
+            server.js helpers.js geo.js intelligence.js ncm.js \
+            Dockerfile .dockerignore .env \
+            $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/
+          
+          sshpass -e scp $SSH_OPTS views/*.ejs $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/views/
+          sshpass -e scp $SSH_OPTS assets/style.css $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/assets/
+          
+          # Sync data files (ncm.json, municipios cache)
+          sshpass -e scp $SSH_OPTS \
+            ncm.json municipios_ibge_cache.json \
+            $SSH_USER@$SSH_HOST:/tmp/pagamentos-deploy/
+          
+          # Move files to /opt and build/run Docker container
+          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST << 'ENDSSH'
+            # Copy deployed files to /opt/pagamentos
+            sudo cp -rf /tmp/pagamentos-deploy/* /opt/pagamentos/
+            rm -rf /tmp/pagamentos-deploy
+            
+            cd /opt/pagamentos
+            
+            # Stop and remove existing container if running
+            sudo docker stop pagamentos 2>/dev/null || true
+            sudo docker rm pagamentos 2>/dev/null || true
+            
+            # Build new image
+            sudo docker build -t pagamentos .
+            
+            # Run new container
+            sudo docker run -d \
+              --name pagamentos \
+              --restart unless-stopped \
+              -p 4102:4102 \
+              --env-file .env \
+              pagamentos
+            
+            # Cleanup old images
+            sudo docker image prune -f
+          ENDSSH
+
+      - name: Verify deployment
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASS: ${{ secrets.SSH_PASS }}
+        run: |
+          sleep 5
+          export SSHPASS="$SSH_PASS"
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $SSH_PORT"
+          sshpass -e ssh $SSH_OPTS $SSH_USER@$SSH_HOST "sudo docker ps --filter name=pagamentos --format '{{.Status}}'"

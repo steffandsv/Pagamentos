@@ -1,0 +1,15 @@
+.git
+.gitignore
+.github
+node_modules
+npm-debug.log
+.env
+.env.*
+*.php
+README.md
+default.php
+exemplocancelada.xml
+exemplonfe.xml
+banco.sql
+.dockerignore
+Dockerfile
