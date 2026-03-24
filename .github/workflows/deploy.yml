@@ -59,7 +59,7 @@ jobs:
           $SSH_CMD "cat > /tmp/pagamentos-deploy.sh << 'SCRIPT'
           #!/bin/bash
           sudo mkdir -p /opt/pagamentos
-          sudo cp -rf /tmp/pagamentos-deploy/* /opt/pagamentos/
+          sudo cp -rf /tmp/pagamentos-deploy/. /opt/pagamentos/
           rm -rf /tmp/pagamentos-deploy /tmp/pagamentos-deploy.sh
           cd /opt/pagamentos
           sudo docker stop pagamentos 2>/dev/null || true
