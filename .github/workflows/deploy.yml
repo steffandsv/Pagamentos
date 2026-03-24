@@ -68,7 +68,7 @@ jobs:
           sudo docker run -d \
             --name pagamentos \
             --restart unless-stopped \
-            -p 4102:4102 \
+            -p 4105:4105 \
             --env-file .env \
             pagamentos
           sudo docker image prune -f

@@ -16,7 +16,7 @@ const Intelligence = require('./intelligence');
 const NCMRegistry = require('./ncm');
 
 const app = express();
-const PORT = process.env.APP_PORT || 4102;
+const PORT = process.env.APP_PORT || 4105;
 
 // --- Database Pool ---
 const pool = mysql.createPool({
