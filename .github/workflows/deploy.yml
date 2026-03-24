@@ -68,7 +68,7 @@ jobs:
           sudo docker run -d \
             --name pagamentos \
             --restart unless-stopped \
-            -p 4105:4105 \
+            -p ${{ secrets.APP_PORT }}:${{ secrets.APP_PORT }} \
             --env-file .env \
             pagamentos
           sudo docker image prune -f
