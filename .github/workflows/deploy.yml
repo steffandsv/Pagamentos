@@ -64,6 +64,8 @@ jobs:
           cd /opt/pagamentos
           sudo docker stop pagamentos 2>/dev/null || true
           sudo docker rm pagamentos 2>/dev/null || true
+          sleep 2
+          sudo fuser -k ${{ secrets.APP_PORT }}/tcp 2>/dev/null || true
           sudo docker build -t pagamentos .
           sudo docker run -d \
             --name pagamentos \
