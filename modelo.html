@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Analítico Dinâmico - MABUS</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+        }
+
+        .custom-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .badge-critico {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #f87171;
+        }
+
+        .badge-alerta {
+            background-color: #fef3c7;
+            color: #b45309;
+            border: 1px solid #fbbf24;
+        }
+
+        .badge-noprazo {
+            background-color: #dcfce3;
+            color: #15803d;
+            border: 1px solid #4ade80;
+        }
+
+        .badge-pago {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #34d399;
+        }
+
+        .tab-active {
+            border-color: #3b82f6;
+            color: #1e3a8a;
+            background-color: #eff6ff;
+        }
+
+        .tab-inactive {
+            border-color: transparent;
+            color: #6b7280;
+            hover: text-gray-900;
+        }
+
+        .btn-action {
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Custom Checkbox Toggle */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #10b981;
+        }
+
+        .toggle-checkbox:checked+.toggle-label {
+            background-color: #10b981;
+        }
+    </style>
+</head>
+
+<body class="text-gray-800 p-6">
+
+    <div class="max-w-7xl mx-auto">
+
+        <div
+            class="bg-indigo-900 border border-indigo-800 rounded-t-lg p-4 flex flex-col md:flex-row justify-between items-center shadow-md">
+            <div class="flex items-center space-x-4 mb-4 md:mb-0">
+                <input type="file" id="fileImport" accept=".json,.xml,.xlsx,.csv,.zip" class="hidden"
+                    onchange="handleFileUpload(event)">
+                <button onclick="document.getElementById('fileImport').click()"
+                    class="btn-action bg-indigo-600 hover:bg-indigo-500 text-white py-2 px-5 rounded font-bold text-sm border border-indigo-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                    </svg>
+                    Importar Base (ZIP, XML, Excel, JSON)
+                </button>
+                <span id="import-feedback"
+                    class="text-indigo-200 text-xs font-mono font-medium hidden">Processando...</span>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <div class="text-right">
+                    <p id="last-saved" class="text-[10px] text-indigo-300 uppercase tracking-widest font-bold mb-1">
+                        Status: Não salvo</p>
+                    <button onclick="saveProgress()"
+                        class="btn-action bg-green-600 hover:bg-green-500 text-white py-1.5 px-4 rounded font-bold text-xs">
+                        💾 Salvar Progresso
+                    </button>
+                </div>
+                <button onclick="clearData()"
+                    class="text-indigo-300 hover:text-red-400 text-xs underline font-medium ml-2"
+                    title="Limpar todos os dados">Zerar Base</button>
+            </div>
+        </div>
+
+        <header
+            class="flex flex-col md:flex-row justify-between items-center bg-gray-900 text-white p-6 border-b-4 border-blue-500">
+            <div class="mb-4 md:mb-0">
+                <h1 class="text-2xl font-bold">Painel de Recuperação de Crédito</h1>
+                <p class="text-gray-300 text-sm mt-1">Análise de Aging (Net 30) - Data Base: 16/03/2026</p>
+            </div>
+            <div class="text-right flex space-x-6">
+                <div>
+                    <p class="text-sm text-gray-400">Total Crítico Exibido</p>
+                    <p class="text-xl font-bold text-red-400" id="kpi-total-critico">R$ 0,00</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-400">A Receber (Pendente)</p>
+                    <p class="text-2xl font-bold" id="kpi-total">R$ 0,00</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="bg-white border-b border-gray-200">
+            <div class="flex flex-wrap -mb-px px-6" id="company-tabs">
+                <button onclick="changeCompany('ALL')" id="comp-ALL"
+                    class="w-1/3 sm:w-auto py-4 px-6 text-center border-b-2 font-bold uppercase text-sm tab-active transition-colors">
+                    🌍 Visão Consolidada
+                </button>
+                <button onclick="changeCompany('STEFFA')" id="comp-STEFFA"
+                    class="w-1/3 sm:w-auto py-4 px-6 text-center border-b-2 font-bold uppercase text-sm tab-inactive transition-colors">
+                    🏢 Carteira STEFFA
+                </button>
+                <button onclick="changeCompany('LILIAN')" id="comp-LILIAN"
+                    class="w-1/3 sm:w-auto py-4 px-6 text-center border-b-2 font-bold uppercase text-sm tab-inactive transition-colors">
+                    🏢 Carteira LILIAN
+                </button>
+            </div>
+        </div>
+
+        <div
+            class="bg-gray-50 px-6 border-b border-gray-200 mb-6 rounded-b-lg shadow-sm flex flex-col md:flex-row justify-between items-center">
+            <nav class="flex space-x-4 md:space-x-8 overflow-x-auto" aria-label="Tabs">
+                <button onclick="changeView('dashboard')" id="view-dashboard"
+                    class="border-gray-800 text-gray-900 border-b-2 py-3 px-1 text-sm font-bold uppercase transition-colors whitespace-nowrap">
+                    📊 Dashboard
+                </button>
+                <button onclick="changeView('faturas')" id="view-faturas"
+                    class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 py-3 px-1 text-sm font-bold uppercase transition-colors whitespace-nowrap">
+                    📋 Gestão de Faturas
+                </button>
+                <button onclick="changeView('cobranca')" id="view-cobranca"
+                    class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 py-3 px-1 text-sm font-bold uppercase transition-colors flex items-center whitespace-nowrap">
+                    📝 Lista de Cobrança
+                    <span id="badge-critico-tab"
+                        class="ml-2 bg-red-100 text-red-600 py-0.5 px-2 rounded-full text-xs font-bold">0</span>
+                </button>
+                <button onclick="changeView('pdca')" id="view-pdca"
+                    class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 py-3 px-1 text-sm font-bold uppercase transition-colors flex items-center whitespace-nowrap">
+                    🎯 Ações PDCA
+                </button>
+            </nav>
+
+            <div class="py-3 flex flex-wrap gap-2">
+                <button onclick="exportToPDF()"
+                    class="btn-action bg-red-600 hover:bg-red-700 text-white py-1.5 px-4 rounded text-xs font-bold uppercase tracking-wider">📄
+                    PDF</button>
+                <button onclick="exportToExcel()"
+                    class="btn-action bg-green-600 hover:bg-green-700 text-white py-1.5 px-4 rounded text-xs font-bold uppercase tracking-wider">📊
+                    Excel</button>
+                <button onclick="exportToJSON()"
+                    class="btn-action bg-yellow-500 hover:bg-yellow-600 text-white py-1.5 px-4 rounded text-xs font-bold uppercase tracking-wider">{
+                    } JSON</button>
+            </div>
+        </div>
+
+        <div id="tab-dashboard" class="space-y-6 block">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="card border-l-4 border-red-500 bg-red-50">
+                    <h3 class="text-sm text-red-800 font-bold uppercase">Atraso Crítico (> 30 dias)</h3>
+                    <p class="text-3xl font-bold text-red-600 mt-2" id="kpi-critico">0 Notas</p>
+                </div>
+                <div class="card border-l-4 border-yellow-500 bg-yellow-50">
+                    <h3 class="text-sm text-yellow-800 font-bold uppercase">Atraso Leve (1 a 30 dias)</h3>
+                    <p class="text-3xl font-bold text-yellow-600 mt-2" id="kpi-alerta">0 Notas</p>
+                </div>
+                <div class="card border-l-4 border-green-500 bg-green-50">
+                    <h3 class="text-sm text-green-800 font-bold uppercase">No Prazo / A Vencer</h3>
+                    <p class="text-3xl font-bold text-green-600 mt-2" id="kpi-noprazo">0 Notas</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold" id="titulo-grafico">Prioridade de Cobrança por Cliente (Pendentes)
+                    </h3>
+                    <div class="flex space-x-3 text-sm font-medium">
+                        <span class="flex items-center"><span
+                                class="w-3 h-3 bg-red-500 inline-block mr-1 rounded-sm"></span> Crítico</span>
+                        <span class="flex items-center"><span
+                                class="w-3 h-3 bg-yellow-400 inline-block mr-1 rounded-sm"></span> Atraso Leve</span>
+                        <span class="flex items-center"><span
+                                class="w-3 h-3 bg-green-500 inline-block mr-1 rounded-sm"></span> No Prazo</span>
+                    </div>
+                </div>
+                <div class="custom-scroll" style="height: 500px; overflow-y: auto;">
+                    <div style="height: 800px; position: relative;" id="chart-container">
+                        <canvas id="chartDevedores"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-faturas" class="space-y-6 hidden">
+            <div class="card overflow-hidden border-t-4 border-blue-500">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Central de Conciliação e Faturas</h3>
+                        <p class="text-sm text-gray-500 mt-1">Filtre notas e dê baixa manualmente (O status "Pago"
+                            reflete instantaneamente nos gráficos).</p>
+                    </div>
+                </div>
+
+                <div
+                    class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Pesquisar</label>
+                        <input type="text" id="filter-search" oninput="renderTable()"
+                            placeholder="Buscar Cliente, CNPJ, NF ou Valor..."
+                            class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Município /
+                            Cliente</label>
+                        <select id="filter-municipio" onchange="renderTable()"
+                            class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todos os Municípios</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Status
+                            Financeiro</label>
+                        <select id="filter-status" onchange="renderTable()"
+                            class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todos os Status</option>
+                            <option value="critico">Atraso Crítico (>30d)</option>
+                            <option value="alerta">Atraso Leve (1-30d)</option>
+                            <option value="noprazo">No Prazo / A Vencer</option>
+                            <option value="pago">Conciliado (Pago)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Vencimento
+                            (Mês)</label>
+                        <input type="month" id="filter-date" onchange="renderTable()"
+                            class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto h-[600px] custom-scroll">
+                    <table class="min-w-full text-left border-collapse text-sm">
+                        <thead class="bg-gray-100 sticky top-0 shadow-sm z-10">
+                            <tr>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600 text-center"
+                                    width="80">PAGO?</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600">NF / EMISSÃO</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600">CLIENTE / CNPJ</th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600 text-right">VALOR
+                                </th>
+                                <th class="p-3 border-b border-gray-200 font-semibold text-gray-600 text-center">STATUS
+                                    ATUAL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="divide-y divide-gray-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-cobranca" class="space-y-6 hidden">
+            <div class="card border-t-4 border-red-600">
+                <div
+                    class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-200 pb-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                                </path>
+                            </svg>
+                            Ação Imediata (Críticos)
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">Devedores com mais de 30 dias de atraso. (Notas pagas não
+                            aparecem aqui).</p>
+                    </div>
+                    <div class="flex flex-col items-end mt-4 md:mt-0">
+                        <button onclick="copiarLista()"
+                            class="bg-red-600 text-white px-5 py-2.5 rounded-lg shadow-sm hover:bg-red-700 hover:shadow-md font-semibold transition-all flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3">
+                                </path>
+                            </svg>
+                            Copiar Roteiro
+                        </button>
+                        <div id="copy-feedback" class="text-green-600 text-xs font-bold mt-2 hidden transition-all">✓
+                            Roteiro copiado!</div>
+                    </div>
+                </div>
+                <div id="cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                <textarea id="texto-cobranca" class="sr-only" aria-hidden="true"></textarea>
+            </div>
+        </div>
+
+        <div id="tab-pdca" class="space-y-6 hidden">
+            <div class="card border-l-4 border-blue-600 bg-white shadow-sm">
+                <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Diretrizes de Ação (Régua B2G - Ciclo PDCA)
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <span
+                            class="bg-blue-100 text-blue-800 font-bold px-2 py-1 rounded text-xs mb-2 inline-block uppercase">PLAN
+                            (Preventivo)</span>
+                        <p class="text-sm text-gray-700">Contato preventivo 5 dias antes do vencimento para alinhar o
+                            pagamento.</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <span
+                            class="bg-yellow-100 text-yellow-800 font-bold px-2 py-1 rounded text-xs mb-2 inline-block uppercase">DO
+                            (Ativa)</span>
+                        <p class="text-sm text-gray-700">Cobrança ativa a cada 7 dias de atraso. Registrar interações.
+                        </p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <span
+                            class="bg-red-100 text-red-800 font-bold px-2 py-1 rounded text-xs mb-2 inline-block uppercase">CHECK
+                            & ACT</span>
+                        <p class="text-sm text-gray-700">Reunião Semanal de Fluxo e Acionamento Jurídico (>90d).</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card border-t-4 border-red-500 shadow-sm">
+                    <h3 class="text-md font-bold text-gray-900 mb-1">⚠️ Urgência Operacional (Sem NF)</h3>
+                    <div id="pdca-sn-list" class="space-y-3 max-h-80 overflow-y-auto custom-scroll pr-2"></div>
+                </div>
+                <div class="card border-t-4 border-indigo-500 shadow-sm">
+                    <h3 class="text-md font-bold text-gray-900 mb-1">⭐ Faturas Curva A (> R$ 5.000,00)</h3>
+                    <div id="pdca-curvaa-list" class="space-y-3 max-h-80 overflow-y-auto custom-scroll pr-2"></div>
+                </div>
+            </div>
+
+            <div class="card border-t-4 border-gray-800 bg-gray-50 shadow-sm">
+                <h3 class="text-lg font-bold text-gray-900 mb-2">⚖️ Ação Jurídica (Crônicos > 90 dias)</h3>
+                <div id="pdca-juridico-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Base atualizada
+        const DATA_BASE = new Date(2026, 2, 16);
+
+        let rawData = [
+            { nf: 'S/N', data: '02/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Prefeitura Municipal de Delfin\n17894064000186', valorOriginal: 'R$ 156,00' },
+            { nf: 'S/N', data: '02/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Taiuva\n45339611000105', valorOriginal: 'R$ 150,74' },
+            { nf: 'S/N', data: '02/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE SÃO JOÃO DO PARAI\n24791154000107', valorOriginal: 'R$ 9.831,00' },
+            { nf: 'S/N', data: '02/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE TANABI\n45157104000142', valorOriginal: 'R$ 12.124,00' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE TERRA ROXA\n45709896000110', valorOriginal: 'R$ 1.212,89' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE TERRA ROXA\n45709896000110', valorOriginal: 'R$ 154,00' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE TERRA ROXA\n45709896000110', valorOriginal: 'R$ 401,99' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE DRACENA\n44880060000111', valorOriginal: 'R$ 242,99' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE DRACENA\n44880060000111', valorOriginal: 'R$ 119,80' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n18279067000172', valorOriginal: 'R$ 17.686,99' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n18279067000172', valorOriginal: 'R$ 5.951,30' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n18279067000172', valorOriginal: 'R$ 8.170,00' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n18279067000172', valorOriginal: 'R$ 3.078,00' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n18279067000172', valorOriginal: 'R$ 12.255,00' },
+            { nf: 'S/N', data: '03/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n18279067000172', valorOriginal: 'R$ 2.873,30' },
+            { nf: 'S/N', data: '04/03/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Taiuva\n45339611000105', valorOriginal: 'R$ 118,80' },
+            { nf: 'S/N', data: '04/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE ESTRELA DO INDAIA\n18301028000124', valorOriginal: 'R$ 1.200,00' },
+            { nf: 'S/N', data: '04/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE DRACENA\n44880060000111', valorOriginal: 'R$ 18.760,28' },
+            { nf: 'S/N', data: '04/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n18279067000172', valorOriginal: 'R$ 8.170,00' },
+            { nf: 'S/N', data: '04/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Buritizeiro\n16279067000172', valorOriginal: 'R$ 2.873,30' },
+            { nf: 'S/N', data: '05/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Ouroeste\n01611213000112', valorOriginal: 'R$ 1.492,80' },
+            { nf: 'S/N', data: '05/03/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Ipua\n49556863000139', valorOriginal: 'R$ 1.850,00' },
+            { nf: 'S/N', data: '05/12/2025', empresa: '58603996 LILIAN...', clienteOriginal: 'Prefeitura Municipal de Delfin\n17894064000186', valorOriginal: 'R$ 329,99' },
+            { nf: 'S/N', data: '05/12/2025', empresa: '58603996 LILIAN...', clienteOriginal: 'Prefeitura Municipal de Delfin\n17894064000186', valorOriginal: 'R$ 260,00' },
+            { nf: 'S/N', data: '06/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE SANTA SALETE\n01611211000123', valorOriginal: 'R$ 522,00' },
+            { nf: 'S/N', data: '06/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE DRACENA\n44880060000111', valorOriginal: 'R$ 3.000,00' },
+            { nf: 'S/N', data: '06/03/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Ouroeste\n01611213000112', valorOriginal: 'R$ 530,46' },
+            { nf: 'S/N', data: '07/11/2025', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Abadia de Goias\n01613940000119', valorOriginal: 'R$ 524,99' },
+            { nf: 'S/N', data: '08/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Jenipapo de Minas\n01613376000134', valorOriginal: 'R$ 3.020,80' },
+            { nf: 'S/N', data: '09/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Valentim Gentil\n46599833000111', valorOriginal: 'R$ 304,00' },
+            { nf: 'S/N', data: '09/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE ASSIS\n46179941000135', valorOriginal: 'R$ 499,00' },
+            { nf: 'S/N', data: '09/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE ASSIS\n46179941000135', valorOriginal: 'R$ 638,00' },
+            { nf: 'S/N', data: '11/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'MUNICIPIO DE JABORANDI\n52382702000180', valorOriginal: 'R$ 9.334,00' },
+            { nf: 'S/N', data: '11/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'MUNICIPIO DE JABORANDI\n52382702000180', valorOriginal: 'R$ 485,00' },
+            { nf: 'S/N', data: '11/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE IBITINGA\n45321460000150', valorOriginal: 'R$ 1.220,00' },
+            { nf: 'S/N', data: '13/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE SANTA SALETE\n01611211000123', valorOriginal: 'R$ 98,20' },
+            { nf: 'S/N', data: '13/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE SANTA SALETE\n01611211000123', valorOriginal: 'R$ 142,40' },
+            { nf: 'S/N', data: '13/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Ouroeste\n01611213000112', valorOriginal: 'R$ 11.662,00' },
+            { nf: 'S/N', data: '16/10/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE BOITUVA\n46634499000190', valorOriginal: 'R$ 1.492,68' },
+            { nf: 'S/N', data: '16/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Miracema\n29114121000146', valorOriginal: 'R$ 316,20' },
+            { nf: 'S/N', data: '16/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Casa Branca\n45735479000142', valorOriginal: 'R$ 1.085,00' },
+            { nf: 'S/N', data: '17/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Ibate\n45355575000165', valorOriginal: 'R$ 520,00' },
+            { nf: 'S/N', data: '19/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Valentim Gentil\n46599833000111', valorOriginal: 'R$ 2.680,22' },
+            { nf: 'S/N', data: '21/05/2025', empresa: '58603996 LILIAN...', clienteOriginal: 'MUNICIPIO DE PRADOPOLIS\n48664296000171', valorOriginal: 'R$ 225,00' },
+            { nf: 'S/N', data: '22/01/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE CONSELHEIRO PENA\n19769660000160', valorOriginal: 'R$ 8.000,00' },
+            { nf: 'S/N', data: '23/01/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE ARTUR NOGUEIRA\n45735552000186', valorOriginal: 'R$ 2.920,00' },
+            { nf: 'S/N', data: '23/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE SANTA CRUZ DA CON\n44751725000197', valorOriginal: 'R$ 2.382,80' },
+            { nf: 'S/N', data: '23/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'FUNDO MUNICIPAL DE SAUDE DO MU\n11813986000135', valorOriginal: 'R$ 8.700,00' },
+            { nf: 'S/N', data: '24/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE PEREIRA BARRETO\n44446904000110', valorOriginal: 'R$ 770,00' },
+            { nf: 'S/N', data: '24/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE PEREIRA BARRETO\n44446904000110', valorOriginal: 'R$ 4.378,00' },
+            { nf: 'S/N', data: '24/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Ibate\n45355575000165', valorOriginal: 'R$ 520,00' },
+            { nf: 'S/N', data: '25/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Taiuva\n45339611000105', valorOriginal: 'R$ 103,48' },
+            { nf: 'S/N', data: '25/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE PITANGUEIRAS\n45370707000128', valorOriginal: 'R$ 263,98' },
+            { nf: 'S/N', data: '25/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE DRACENA\n44880060000111', valorOriginal: 'R$ 228,90' },
+            { nf: 'S/N', data: '25/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE DRACENA\n44880060000111', valorOriginal: 'R$ 51,95' },
+            { nf: 'S/N', data: '25/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE ALVORADA DE MINAS\n18303164000153', valorOriginal: 'R$ 160,00' },
+            { nf: 'S/N', data: '27/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE SANTANA DO PARAIS\n38515573000120', valorOriginal: 'R$ 1.475,00' },
+            { nf: 'S/N', data: '27/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'MUNICIPIO DE PRADOPOLIS\n48664296000171', valorOriginal: 'R$ 325,00' },
+            { nf: 'S/N', data: '27/02/2026', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE PITANGUEIRAS\n45370707000128', valorOriginal: 'R$ 175,00' },
+            { nf: 'S/N', data: '27/02/2026', empresa: '58603996 LILIAN...', clienteOriginal: 'Municipio de Abadia de Goias\n01613940000119', valorOriginal: 'R$ 2.058,00' },
+            { nf: 'S/N', data: '29/10/2025', empresa: '58603996 LILIAN...', clienteOriginal: 'Prefeitura Municipal de Nova S\n18291385000159', valorOriginal: 'R$ 302,86' },
+            { nf: 'S/N', data: '29/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE MARACAI\n44494136000170', valorOriginal: 'R$ 2.272,00' },
+            { nf: 'S/N', data: '30/12/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'MUNICIPIO DE MARACAI\n44494136000170', valorOriginal: 'R$ 884,87' },
+            { nf: 'S/N', data: '31/10/2025', empresa: '56386309 STEFFA...', clienteOriginal: 'Municipio de Ibate\n45355575000165', valorOriginal: 'R$ 364,00' }
+        ];
+
+        let currentFilter = 'ALL';
+        let myChart = null;
+        let currentFilteredDataForExport = [];
+        let allProcessedData = [];
+
+        // Inicialização
+        window.onload = () => {
+            initializeIds(rawData);
+            loadProgress();
+            if (rawData.length > 0) {
+                renderApp();
+            } else {
+                renderEmptyState();
+            }
+        };
+
+        function initializeIds(dataArray) {
+            dataArray.forEach((item) => {
+                if (!item.id) item.id = 'nf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                if (item.pago === undefined) item.pago = false;
+            });
+        }
+
+        // ==========================================
+        // SISTEMA DE IMPORTAÇÃO E PERSISTÊNCIA
+        // ==========================================
+
+        function saveProgress() {
+            if (rawData.length === 0) return alert("Não há dados para salvar.");
+            const now = new Date();
+            const dateString = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR');
+            localStorage.setItem('mabus_data', JSON.stringify(rawData));
+            localStorage.setItem('mabus_last_save', dateString);
+            document.getElementById('last-saved').textContent = `Status: Salvo em ${dateString}`;
+
+            const btn = document.querySelector('button[onclick="saveProgress()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✓ Salvo!';
+            btn.classList.replace('bg-green-600', 'bg-teal-600');
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.replace('bg-teal-600', 'bg-green-600');
+            }, 2000);
+        }
+
+        function loadProgress() {
+            const savedData = localStorage.getItem('mabus_data');
+            const savedDate = localStorage.getItem('mabus_last_save');
+            if (savedData) {
+                const parsedData = JSON.parse(savedData);
+                if (parsedData && parsedData.length > 0) {
+                    rawData = parsedData;
+                    if (savedDate) document.getElementById('last-saved').textContent = `Status: Salvo em ${savedDate}`;
+                }
+            }
+        }
+
+        function clearData() {
+            if (confirm("Tem certeza que deseja zerar a base atual? Todos os dados não salvos externamente serão perdidos.")) {
+                localStorage.removeItem('mabus_data');
+                localStorage.removeItem('mabus_last_save');
+                rawData = [];
+                document.getElementById('last-saved').textContent = "Status: Base zerada";
+                renderEmptyState();
+            }
+        }
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const feedback = document.getElementById('import-feedback');
+            feedback.classList.remove('hidden');
+            feedback.textContent = `Processando ${file.name}...`;
+
+            try {
+                const extension = file.name.split('.').pop().toLowerCase();
+
+                if (extension === 'zip') {
+                    await processZipImport(file);
+                } else {
+                    const contents = await readFileAsync(file);
+                    if (extension === 'json') {
+                        processJsonImport(contents);
+                    } else if (extension === 'xml') {
+                        processXmlImport(contents, false);
+                    } else if (extension === 'xlsx' || extension === 'csv') {
+                        processExcelImport(contents);
+                    } else {
+                        throw new Error("Formato não suportado.");
+                    }
+                }
+
+                initializeIds(rawData);
+                feedback.textContent = `✓ ${rawData.length} registros ativos.`;
+                setTimeout(() => feedback.classList.add('hidden'), 4000);
+                renderApp();
+
+            } catch (error) {
+                console.error(error);
+                feedback.textContent = "Erro na importação: " + error.message;
+                feedback.classList.add('text-red-300');
+            }
+            event.target.value = '';
+        }
+
+        function readFileAsync(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                if (file.name.includes('.xlsx') || file.name.includes('.csv')) reader.readAsArrayBuffer(file);
+                else reader.readAsText(file);
+            });
+        }
+
+        async function processZipImport(file) {
+            const zip = new JSZip();
+            const contents = await zip.loadAsync(file);
+            let extractedCount = 0;
+            rawData = [];
+            for (const relativePath of Object.keys(contents.files)) {
+                const zipEntry = contents.files[relativePath];
+                if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.xml')) {
+                    const xmlString = await zipEntry.async("string");
+                    processXmlImport(xmlString, true);
+                    extractedCount++;
+                }
+            }
+            if (extractedCount === 0) throw new Error("Nenhum arquivo .xml no ZIP.");
+        }
+
+        function processJsonImport(jsonString) {
+            rawData = JSON.parse(jsonString).map(item => ({
+                nf: item.nota_fiscal || item.nf || 'S/N',
+                data: item.emissao || item.data || new Date().toLocaleDateString('pt-BR'),
+                empresa: item.empresa_responsavel || item.empresa || 'DESCONHECIDA',
+                clienteOriginal: `${item.cliente_municipio || item.clienteOriginal}\n${item.cnpj_cliente || ''}`,
+                valorOriginal: String(item.valor_fatura || item.valorOriginal).replace('R$', '').trim(),
+                pago: item.pago || false
+            }));
+        }
+
+        function processExcelImport(arrayBuffer) {
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            rawData = jsonData.map(item => {
+                const getVal = (keys) => { for (let k of keys) if (item[k]) return item[k]; return ''; };
+                return {
+                    nf: getVal(['Nota Fiscal', 'NF', 'nota_fiscal']) || 'S/N',
+                    data: getVal(['Data de Emissão', 'Emissão', 'Data', 'emissao']),
+                    empresa: getVal(['Empresa', 'Empresa Responsável', 'empresa']),
+                    clienteOriginal: `${getVal(['Cliente', 'Município', 'cliente'])} \n ${getVal(['CNPJ', 'cnpj'])}`,
+                    valorOriginal: String(getVal(['Valor', 'Valor Fatura', 'valor'])),
+                    pago: false
+                };
+            });
+        }
+
+        function processXmlImport(xmlString, append = false) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+            let registros = xmlDoc.getElementsByTagName("registro");
+            if (registros.length === 0) registros = xmlDoc.getElementsByTagName("item");
+            if (!append) rawData = [];
+
+            for (let i = 0; i < registros.length; i++) {
+                const node = registros[i];
+                const getVal = (tag) => node.getElementsByTagName(tag)[0]?.textContent || '';
+                rawData.push({
+                    nf: getVal("nf") || getVal("nota_fiscal") || 'S/N',
+                    data: getVal("emissao") || getVal("data"),
+                    empresa: getVal("empresa"),
+                    clienteOriginal: `${getVal("cliente")}\n${getVal("cnpj")}`,
+                    valorOriginal: getVal("valor"),
+                    pago: false
+                });
+            }
+
+            if (registros.length === 0 && xmlDoc.getElementsByTagName("nfeProc").length > 0) {
+                const getTag = (tag) => xmlDoc.getElementsByTagName(tag)[0]?.textContent || '';
+                let dataBruta = getTag("dhEmi") || '';
+                let dataFormatada = new Date().toLocaleDateString('pt-BR');
+                if (dataBruta) dataFormatada = dataBruta.split('T')[0].split('-').reverse().join('/');
+
+                rawData.push({
+                    nf: getTag("nNF") || 'S/N',
+                    data: dataFormatada,
+                    empresa: getTag("xNome") || 'Emitente Desconhecido',
+                    clienteOriginal: `${xmlDoc.getElementsByTagName("dest")[0]?.getElementsByTagName("xNome")[0]?.textContent || 'Cliente Desconhecido'}\n${xmlDoc.getElementsByTagName("dest")[0]?.getElementsByTagName("CNPJ")[0]?.textContent || ''}`,
+                    valorOriginal: getTag("vNF") || '0.00',
+                    pago: false
+                });
+            }
+        }
+
+        // ==========================================
+        // LÓGICA DE RENDERIZAÇÃO E FILTROS DA TABELA
+        // ==========================================
+
+        function renderEmptyState() {
+            document.getElementById('kpi-total').textContent = "R$ 0,00";
+            document.getElementById('kpi-total-critico').textContent = "R$ 0,00";
+            document.getElementById('kpi-critico').textContent = "0 Notas";
+            document.getElementById('kpi-alerta').textContent = "0 Notas";
+            document.getElementById('kpi-noprazo').textContent = "0 Notas";
+            document.getElementById('table-body').innerHTML = `<tr><td colspan="5" class="p-6 text-center text-gray-400 font-medium">Nenhum dado ativo no momento. Por favor, importe uma nova base.</td></tr>`;
+            document.getElementById('cards-container').innerHTML = '';
+            if (myChart) myChart.destroy();
+        }
+
+        function parseData() {
+            return rawData.map(item => {
+                const parts = item.clienteOriginal.split('\n');
+                const nomeCliente = parts[0];
+                const cnpj = parts.length > 1 ? parts[1] : 'CNPJ Não Localizado';
+
+                let valorLimpo = item.valorOriginal.toString().replace('R$', '').replace(/\./g, '').replace(',', '.').trim();
+                const valorNumerico = parseFloat(valorLimpo) || 0;
+
+                let diffDays = 0, dataVencimento = new Date();
+
+                if (item.data && item.data.includes('/')) {
+                    const [dd, mm, yyyy] = item.data.split('/');
+                    dataVencimento = new Date(yyyy, mm - 1, dd);
+                    dataVencimento.setDate(dataVencimento.getDate() + 30);
+                    const diffTime = DATA_BASE - dataVencimento;
+                    diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                }
+
+                let statusObj = {}; let acaoCobranca = ''; let grauRisco = '';
+
+                if (item.pago) {
+                    statusObj = { text: `Pago`, class: 'badge-pago', type: 'pago' };
+                    acaoCobranca = 'Resolvido (Conciliado)';
+                    grauRisco = 'Zero';
+                } else if (diffDays > 90) {
+                    statusObj = { text: `Vencido (${diffDays} dias)`, class: 'badge-critico', type: 'critico' };
+                    acaoCobranca = 'Jurídica';
+                    grauRisco = 'Alto';
+                } else if (diffDays > 30) {
+                    statusObj = { text: `Vencido (${diffDays} dias)`, class: 'badge-critico', type: 'critico' };
+                    acaoCobranca = 'Extrajudicial';
+                    grauRisco = 'Alto';
+                } else if (diffDays > 0 && diffDays <= 30) {
+                    statusObj = { text: `Vencido (${diffDays} dias)`, class: 'badge-alerta', type: 'alerta' };
+                    acaoCobranca = 'Ativa Contínua';
+                    grauRisco = 'Médio';
+                } else {
+                    statusObj = { text: `A Vencer (${Math.abs(diffDays)} dias)`, class: 'badge-noprazo', type: 'noprazo' };
+                    acaoCobranca = diffDays >= -5 ? 'Preventiva' : 'No Prazo';
+                    grauRisco = 'Baixo';
+                }
+
+                let empresaTag = 'DESCONHECIDA';
+                if (item.empresa.includes('STEFFA')) empresaTag = 'STEFFA';
+                if (item.empresa.includes('LILIAN')) empresaTag = 'LILIAN';
+
+                return {
+                    id: item.id,
+                    nf: item.nf,
+                    isSemNota: item.nf === 'S/N' || !item.nf,
+                    isCurvaA: valorNumerico >= 5000,
+                    isCronico: diffDays > 90 && !item.pago,
+                    emissao: item.data,
+                    vencimentoFormatado: dataVencimento.toLocaleDateString('pt-BR'),
+                    dataVencimentoRaw: dataVencimento,
+                    empresaTag: empresaTag,
+                    cliente: nomeCliente.trim().toUpperCase(),
+                    cnpj: cnpj.trim(),
+                    valorStr: valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                    valorNum: valorNumerico,
+                    status: statusObj,
+                    acaoCobranca: acaoCobranca,
+                    pago: item.pago
+                };
+            });
+        }
+
+        function togglePagamento(id) {
+            const item = rawData.find(r => r.id === id);
+            if (item) {
+                item.pago = !item.pago;
+                saveProgress();
+                renderApp();
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            const searchVal = document.getElementById('filter-search').value.toLowerCase();
+            const cityVal = document.getElementById('filter-municipio').value;
+            const statusVal = document.getElementById('filter-status').value;
+            const dateVal = document.getElementById('filter-date').value;
+
+            let dataToShow = allProcessedData;
+
+            if (searchVal) {
+                dataToShow = dataToShow.filter(d =>
+                    d.cliente.toLowerCase().includes(searchVal) ||
+                    d.nf.toLowerCase().includes(searchVal) ||
+                    d.cnpj.toLowerCase().includes(searchVal) ||
+                    d.valorStr.toLowerCase().includes(searchVal)
+                );
+            }
+            if (cityVal) dataToShow = dataToShow.filter(d => d.cliente === cityVal);
+            if (statusVal) dataToShow = dataToShow.filter(d => d.status.type === statusVal);
+            if (dateVal) {
+                const [yyyy, mm] = dateVal.split('-');
+                dataToShow = dataToShow.filter(d => d.dataVencimentoRaw.getFullYear() == yyyy && (d.dataVencimentoRaw.getMonth() + 1) == mm);
+            }
+
+            if (dataToShow.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum registro encontrado para estes filtros.</td></tr>`;
+                return;
+            }
+
+            dataToShow.forEach(d => {
+                const tr = document.createElement('tr');
+                let tagColor = d.empresaTag === 'STEFFA' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50';
+                let nfBadge = d.isSemNota ? `<span class="bg-red-600 text-white font-bold px-1 py-0.5 rounded text-[10px] animate-pulse">S/N</span>` : `<span class="text-xs font-bold text-gray-500">NF ${d.nf}</span>`;
+
+                tr.innerHTML = `
+                    <td class="p-3 border-b border-gray-100 text-center">
+                        <label class="relative inline-block w-10 h-5 cursor-pointer">
+                            <input type="checkbox" onchange="togglePagamento('${d.id}')" ${d.pago ? 'checked' : ''} class="sr-only peer toggle-checkbox">
+                            <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all toggle-label"></div>
+                        </label>
+                    </td>
+                    <td class="p-3 border-b border-gray-100">
+                        ${nfBadge}<br><span class="text-xs text-gray-500">${d.emissao}</span>
+                    </td>
+                    <td class="p-3 border-b border-gray-100">
+                        <div class="font-bold text-gray-800 text-xs">${d.cliente}</div>
+                        <div class="text-[10px] text-gray-500 mt-0.5">${d.cnpj} &bull; <span class="${tagColor} px-1 rounded">${d.empresaTag}</span></div>
+                    </td>
+                    <td class="p-3 border-b border-gray-100 text-right font-bold ${d.pago ? 'text-gray-400 line-through' : 'text-gray-900'}">${d.valorStr}</td>
+                    <td class="p-3 border-b border-gray-100 text-center">
+                        <span class="badge ${d.status.class} !text-[10px] w-full block">${d.status.text}</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderApp() {
+            if (rawData.length === 0) return renderEmptyState();
+
+            allProcessedData = parseData();
+
+            if (currentFilter !== 'ALL') {
+                allProcessedData = allProcessedData.filter(d => d.empresaTag === currentFilter);
+            }
+
+            allProcessedData.sort((a, b) => a.dataVencimentoRaw - b.dataVencimentoRaw);
+            currentFilteredDataForExport = allProcessedData;
+
+            const citySelect = document.getElementById('filter-municipio');
+            const currentCity = citySelect.value;
+            citySelect.innerHTML = '<option value="">Todos os Municípios</option>';
+            const uniqueCities = [...new Set(allProcessedData.map(d => d.cliente))].sort();
+            uniqueCities.forEach(city => { citySelect.innerHTML += `<option value="${city}">${city}</option>`; });
+            citySelect.value = currentCity;
+
+            renderTable();
+
+            let totalSoma = 0, totalCritico = 0, countCritico = 0, countAlerta = 0, countNoPrazo = 0;
+            const devedoresMap = {}; const listaCriticos = {};
+            const pdcaSemNotaList = []; const pdcaCurvaAList = []; const pdcaJuridicoList = [];
+
+            const dadosPendentes = allProcessedData.filter(d => !d.pago);
+
+            dadosPendentes.forEach(d => {
+                if (!devedoresMap[d.cliente]) devedoresMap[d.cliente] = { critico: 0, alerta: 0, noprazo: 0, total: 0 };
+
+                devedoresMap[d.cliente][d.status.type] += d.valorNum;
+                devedoresMap[d.cliente].total += d.valorNum;
+                totalSoma += d.valorNum;
+
+                if (d.status.type === 'critico') {
+                    countCritico++; totalCritico += d.valorNum;
+                    if (!listaCriticos[d.cliente]) listaCriticos[d.cliente] = [];
+                    listaCriticos[d.cliente].push(d);
+                } else if (d.status.type === 'alerta') countAlerta++;
+                else countNoPrazo++;
+
+                if (d.isSemNota) pdcaSemNotaList.push(d);
+                if (d.isCurvaA) pdcaCurvaAList.push(d);
+                if (d.isCronico) pdcaJuridicoList.push(d);
+            });
+
+            document.getElementById('kpi-total').textContent = totalSoma.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            document.getElementById('kpi-total-critico').textContent = totalCritico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            document.getElementById('kpi-critico').textContent = `${countCritico} Notas`;
+            document.getElementById('kpi-alerta').textContent = `${countAlerta} Notas`;
+            document.getElementById('kpi-noprazo').textContent = `${countNoPrazo} Notas`;
+            document.getElementById('badge-critico-tab').textContent = countCritico;
+
+            let textOutput = `==========================================================\nRELATÓRIO DE AÇÃO IMEDIATA - CRÍTICOS\n==========================================================\n\n`;
+            const cardsContainer = document.getElementById('cards-container');
+            cardsContainer.innerHTML = '';
+
+            const clientesCriticosArray = Object.keys(listaCriticos).sort((a, b) => devedoresMap[b].critico - devedoresMap[a].critico);
+            if (clientesCriticosArray.length === 0) {
+                cardsContainer.innerHTML = `<div class="col-span-full flex justify-center p-12 bg-white rounded-lg border border-gray-200"><p class="text-gray-500 font-medium">Nenhum devedor em estágio crítico.</p></div>`;
+            }
+
+            clientesCriticosArray.forEach(cliente => {
+                const notas = listaCriticos[cliente];
+                let totalCliente = 0; let notasHtml = '';
+                textOutput += `CLIENTE: ${cliente}\n`;
+
+                notas.forEach(n => {
+                    totalCliente += n.valorNum;
+                    textOutput += ` NF: ${n.nf !== 'S/N' ? n.nf : 'S/N'} | Valor: ${n.valorStr} | Risco: [${n.status.text}]\n`;
+                    notasHtml += `<div class="flex justify-between text-xs py-1 border-b border-gray-100"><span>NF ${n.nf}</span><span class="font-bold text-red-600">${n.valorStr}</span></div>`;
+                });
+                textOutput += `TOTAL: ${totalCliente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n\n`;
+
+                cardsContainer.innerHTML += `
+                    <div class="bg-white rounded border border-gray-200 shadow-sm p-4">
+                        <h4 class="font-bold text-sm truncate">${cliente}</h4>
+                        <p class="text-[10px] text-gray-400 mb-3">${notas[0].cnpj}</p>
+                        <div class="bg-red-50 p-2 rounded text-center mb-2">
+                            <span class="text-xl font-black text-red-700">${devedoresMap[cliente].critico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        </div>
+                        <div class="h-24 overflow-y-auto custom-scroll">${notasHtml}</div>
+                    </div>`;
+            });
+            document.getElementById('texto-cobranca').value = textOutput;
+
+            const renderPdcaList = (elId, list, badgeType) => {
+                const el = document.getElementById(elId);
+                el.innerHTML = '';
+                if (list.length === 0) el.innerHTML = '<p class="text-sm text-gray-500 italic p-3">Nenhuma nota pendente.</p>';
+                else list.forEach(d => {
+                    el.innerHTML += `<div class="bg-white border border-gray-200 rounded p-3 flex justify-between items-center shadow-sm mb-2">
+                        <div><p class="font-bold text-gray-800 text-sm truncate max-w-[200px]" title="${d.cliente}">${d.cliente}</p><p class="text-xs text-gray-500">NF: ${d.nf}</p></div>
+                        <div class="text-right flex flex-col items-end"><p class="font-bold text-gray-900 text-sm">${d.valorStr}</p></div>
+                    </div>`;
+                });
+            };
+            renderPdcaList('pdca-sn-list', pdcaSemNotaList);
+            renderPdcaList('pdca-curvaa-list', pdcaCurvaAList);
+            renderPdcaList('pdca-juridico-list', pdcaJuridicoList);
+
+            const arrayDevedores = Object.entries(devedoresMap).sort((a, b) => b[1].total - a[1].total).slice(0, 25);
+            document.getElementById('chart-container').style.height = Math.max(400, arrayDevedores.length * 35) + 'px';
+            const ctx = document.getElementById('chartDevedores').getContext('2d');
+            if (myChart != null) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: arrayDevedores.map(c => c[0]),
+                    datasets: [
+                        { label: 'Crítico', data: arrayDevedores.map(c => c[1].critico), backgroundColor: '#ef4444' },
+                        { label: 'Alerta', data: arrayDevedores.map(c => c[1].alerta), backgroundColor: '#facc15' },
+                        { label: 'No Prazo', data: arrayDevedores.map(c => c[1].noprazo), backgroundColor: '#22c55e' }
+                    ]
+                },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } }
+            });
+        }
+
+        // ==========================================
+        // UI & EXPORTAÇÕES
+        // ==========================================
+        function changeCompany(empresa) {
+            currentFilter = empresa;
+            ['ALL', 'STEFFA', 'LILIAN'].forEach(id => {
+                document.getElementById(`comp-${id}`).className = `w-1/3 sm:w-auto py-4 px-6 text-center border-b-2 font-bold uppercase text-sm transition-colors ${id === empresa ? 'tab-active' : 'tab-inactive'}`;
+            });
+            renderApp();
+        }
+
+        function changeView(viewId) {
+            ['dashboard', 'faturas', 'cobranca', 'pdca'].forEach(v => {
+                const btn = document.getElementById(`view-${v}`);
+                const tab = document.getElementById(`tab-${v}`);
+                if (!btn || !tab) return;
+                if (v === viewId) {
+                    btn.className = "border-gray-800 text-gray-900 border-b-2 py-3 px-1 text-sm font-bold uppercase transition-colors" + (v === 'cobranca' || v === 'pdca' ? " flex items-center whitespace-nowrap" : " whitespace-nowrap");
+                    tab.classList.remove('hidden');
+                } else {
+                    btn.className = "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 py-3 px-1 text-sm font-bold uppercase transition-colors" + (v === 'cobranca' || v === 'pdca' ? " flex items-center whitespace-nowrap" : " whitespace-nowrap");
+                    tab.classList.add('hidden');
+                }
+            });
+        }
+
+        function copiarLista() {
+            const textOutput = document.getElementById('texto-cobranca').value;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(textOutput).then(() => {
+                    document.getElementById('copy-feedback').classList.remove('hidden');
+                    setTimeout(() => document.getElementById('copy-feedback').classList.add('hidden'), 3000);
+                });
+            }
+        }
+
+        function exportToExcel() {
+            if (currentFilteredDataForExport.length === 0) return alert("Nenhum dado.");
+            const dataToExport = currentFilteredDataForExport.map(d => ({
+                "ID Sistema": d.id,
+                "Pago": d.pago ? "Sim" : "Não",
+                "Nota Fiscal": d.nf, "Data Emissão": d.emissao, "Vencimento": d.vencimentoFormatado,
+                "Cliente": d.cliente, "CNPJ": d.cnpj, "Valor Fatura": d.valorNum, "Status Financeiro": d.status.text
+            }));
+            const ws = XLSX.utils.json_to_sheet(dataToExport);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Inadimplencia");
+            XLSX.writeFile(wb, `Base_Mabus_${currentFilter}.xlsx`);
+        }
+
+        function exportToPDF() {
+            if (currentFilteredDataForExport.length === 0) return alert("Nenhum dado.");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('landscape');
+            const tableColumn = ["NF", "Emissão", "Vencimento", "Empresa", "Cliente", "Valor", "Status", "Pago?"];
+            const tableRows = [];
+
+            currentFilteredDataForExport.forEach(d => {
+                tableRows.push([d.nf, d.emissao, d.vencimentoFormatado, d.empresaTag, d.cliente, d.valorStr, d.status.text, d.pago ? 'SIM' : 'NÃO']);
+            });
+
+            doc.setFontSize(16); doc.text(`Relatório Analítico - MABUS (${currentFilter})`, 14, 15);
+            doc.setFontSize(10); doc.setTextColor(100);
+            doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} | Base Dinâmica`, 14, 22);
+
+            doc.autoTable({ head: [tableColumn], body: tableRows, startY: 28, theme: 'striped', headStyles: { fillColor: [30, 58, 138] }, styles: { fontSize: 8, cellPadding: 2 } });
+            doc.save(`Relatorio_Mabus_${currentFilter}.pdf`);
+        }
+
+        function exportToJSON() {
+            if (currentFilteredDataForExport.length === 0) return alert("Nenhum dado para exportar.");
+            const dataToExport = currentFilteredDataForExport.map(d => ({
+                id_sistema: d.id,
+                nota_fiscal: d.nf,
+                emissao: d.emissao,
+                vencimento: d.vencimentoFormatado,
+                empresa_responsavel: d.empresaTag,
+                cliente_municipio: d.cliente,
+                cnpj_cliente: d.cnpj,
+                valor_fatura: d.valorNum,
+                status_pagamento: d.status.text,
+                acao_indicada: d.acaoCobranca,
+                pago: d.pago
+            }));
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Base_Mabus_${currentFilter}_${new Date().getTime()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+
+</html>

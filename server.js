@@ -118,7 +118,7 @@ app.get('/', async (req, res) => {
     // Security: allow only alphanumeric and underscores
     page = page.replace(/[^a-z0-9_]/g, '');
 
-    const validPages = ['dashboard', 'sales', 'customers', 'geo_opps', 'products', 'intelligence', 'upload'];
+    const validPages = ['dashboard', 'sales', 'customers', 'geo_opps', 'products', 'intelligence', 'cobranca', 'upload'];
     if (!validPages.includes(page)) {
       page = 'notfound';
     }
@@ -142,6 +142,8 @@ app.get('/', async (req, res) => {
       pageData = await getProductsData(whereGlobal);
     } else if (page === 'intelligence') {
       pageData = await getIntelligenceData(whereGlobal);
+    } else if (page === 'cobranca') {
+      pageData = await getCobrancaData(whereGlobal);
     }
 
     res.render('layout', {
@@ -371,12 +373,43 @@ async function getDashboardData(whereGlobal) {
   // 4. Map Data
   const mapData = await geo.getMapDataFromDB(pool, whereGlobal);
 
-  return { kpi, timeline, topCustomers, mapData };
+  // 5. Aging KPIs (Net 30)
+  const [agingRows] = await pool.query(`
+    SELECT 
+      SUM(CASE WHEN i.is_paid = 0 AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) > 30 THEN 1 ELSE 0 END) as critico_count,
+      SUM(CASE WHEN i.is_paid = 0 AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) > 30 THEN i.total_value ELSE 0 END) as critico_val,
+      SUM(CASE WHEN i.is_paid = 0 AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) as alerta_count,
+      SUM(CASE WHEN i.is_paid = 0 AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) BETWEEN 1 AND 30 THEN i.total_value ELSE 0 END) as alerta_val,
+      SUM(CASE WHEN i.is_paid = 0 AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) <= 0 THEN 1 ELSE 0 END) as noprazo_count,
+      SUM(CASE WHEN i.is_paid = 0 AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) <= 0 THEN i.total_value ELSE 0 END) as noprazo_val
+    FROM invoices i WHERE 1=1 ${whereGlobal} AND i.status != 'Cancelada'
+  `);
+  const aging = agingRows[0];
+
+  // 6. Priority Chart - debtors grouped by aging category (top 20)
+  const [priorityRows] = await pool.query(`
+    SELECT 
+      c.name as customer_name,
+      SUM(CASE WHEN DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) > 30 THEN i.total_value ELSE 0 END) as critico,
+      SUM(CASE WHEN DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) BETWEEN 1 AND 30 THEN i.total_value ELSE 0 END) as alerta,
+      SUM(CASE WHEN DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) <= 0 THEN i.total_value ELSE 0 END) as noprazo,
+      SUM(i.total_value) as total
+    FROM invoices i
+    JOIN customers c ON i.customer_id = c.id
+    WHERE 1=1 ${whereGlobal} AND i.status != 'Cancelada' AND i.is_paid = 0
+    GROUP BY c.id
+    ORDER BY total DESC
+    LIMIT 20
+  `);
+
+  return { kpi, timeline, topCustomers, mapData, aging, priorityChart: priorityRows };
 }
 
 async function getSalesData(whereGlobal) {
   const [invoices] = await pool.query(`
-    SELECT i.*, c.name as customer_name, c.doc, comp.name as company_name 
+    SELECT i.*, c.name as customer_name, c.doc, comp.name as company_name,
+      DATE_ADD(i.issue_date, INTERVAL 30 DAY) as due_date,
+      DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) as days_overdue
     FROM invoices i 
     JOIN customers c ON i.customer_id = c.id 
     JOIN companies comp ON i.company_id = comp.id
@@ -445,6 +478,87 @@ async function getProductsData(whereGlobal) {
 async function getIntelligenceData(whereGlobal) {
   const elasticityData = await Intelligence.getElasticityData(pool, whereGlobal);
   return { elasticityData };
+}
+
+async function getCobrancaData(whereGlobal) {
+  // 1. Critical debtors (>30 days overdue, unpaid) grouped by customer
+  const [criticalRows] = await pool.query(`
+    SELECT 
+      c.id as customer_id, c.name, c.doc, c.city, c.uf,
+      i.id as invoice_id, i.number, i.issue_date, i.total_value,
+      DATE_ADD(i.issue_date, INTERVAL 30 DAY) as due_date,
+      DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) as days_overdue
+    FROM invoices i
+    JOIN customers c ON i.customer_id = c.id
+    WHERE 1=1 ${whereGlobal}
+      AND i.status != 'Cancelada'
+      AND i.is_paid = 0
+      AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) > 30
+    ORDER BY days_overdue DESC, i.total_value DESC
+  `);
+
+  // Group by customer
+  const criticalMap = {};
+  for (const row of criticalRows) {
+    if (!criticalMap[row.customer_id]) {
+      criticalMap[row.customer_id] = {
+        name: row.name,
+        doc: row.doc,
+        city: row.city,
+        uf: row.uf,
+        total: 0,
+        invoices: []
+      };
+    }
+    criticalMap[row.customer_id].total += parseFloat(row.total_value);
+    criticalMap[row.customer_id].invoices.push({
+      id: row.invoice_id,
+      number: row.number || 'S/N',
+      issue_date: row.issue_date,
+      due_date: row.due_date,
+      total_value: row.total_value,
+      days_overdue: row.days_overdue
+    });
+  }
+
+  const criticalDebtors = Object.values(criticalMap)
+    .sort((a, b) => b.total - a.total);
+
+  // 2. PDCA - Curva A (>R$5000, unpaid)
+  const [curvaARows] = await pool.query(`
+    SELECT c.name, c.doc, i.number, i.total_value, i.issue_date,
+      DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) as days_overdue
+    FROM invoices i
+    JOIN customers c ON i.customer_id = c.id
+    WHERE 1=1 ${whereGlobal}
+      AND i.status != 'Cancelada' AND i.is_paid = 0
+      AND i.total_value >= 5000
+    ORDER BY i.total_value DESC LIMIT 30
+  `);
+
+  // 3. PDCA - Crônicos (>90 days overdue)
+  const [cronicoRows] = await pool.query(`
+    SELECT c.name, c.doc, c.city, c.uf, i.number, i.total_value, i.issue_date,
+      DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) as days_overdue
+    FROM invoices i
+    JOIN customers c ON i.customer_id = c.id
+    WHERE 1=1 ${whereGlobal}
+      AND i.status != 'Cancelada' AND i.is_paid = 0
+      AND DATEDIFF(CURDATE(), DATE_ADD(i.issue_date, INTERVAL 30 DAY)) > 90
+    ORDER BY days_overdue DESC LIMIT 30
+  `);
+
+  // 4. Summary KPIs for the cobrança page
+  const totalCriticoVal = criticalDebtors.reduce((s, d) => s + d.total, 0);
+  const totalCriticoCount = criticalRows.length;
+
+  return {
+    criticalDebtors,
+    curvaA: curvaARows,
+    cronicos: cronicoRows,
+    totalCriticoVal,
+    totalCriticoCount
+  };
 }
 
 // ============================

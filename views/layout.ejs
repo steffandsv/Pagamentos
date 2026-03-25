@@ -38,6 +38,9 @@
     <a href="/?page=intelligence" class="nav-item <%= page==='intelligence' ? 'active' : '' %>">
         <i class="fa-solid fa-brain"></i> <span>Inteligência de Preço</span>
     </a>
+    <a href="/?page=cobranca" class="nav-item <%= page==='cobranca' ? 'active' : '' %>">
+        <i class="fa-solid fa-gavel"></i> <span>Cobrança & PDCA</span>
+    </a>
     <a href="/?page=upload" class="nav-item <%= page==='upload' ? 'active' : '' %>">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span>Importar XML</span>
     </a>
@@ -55,6 +58,7 @@
             <% } else if(page === 'intelligence') { %>Inteligência de Preços
             <% } else if(page === 'geo_opps') { %>Oportunidades Geográficas
             <% } else if(page === 'upload') { %>Importação de Dados
+            <% } else if(page === 'cobranca') { %>Cobrança & Ações PDCA
             <% } else { %><%= page.charAt(0).toUpperCase() + page.slice(1) %><% } %>
         </div>
         <form method="get" style="display: flex; gap: 10px; align-items: center;">

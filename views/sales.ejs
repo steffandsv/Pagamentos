@@ -9,11 +9,29 @@
                 <th>Empresa</th>
                 <th>Cliente</th>
                 <th>Valor</th>
+                <th>Aging</th>
                 <th>Status</th>
             </tr>
         </thead>
         <tbody>
-            <% invoices.forEach(function(inv) { %>
+            <% invoices.forEach(function(inv) { 
+                let agingClass = 'badge-noprazo';
+                let agingText = 'No Prazo';
+                const daysOver = parseInt(inv.days_overdue) || 0;
+                
+                if (inv.is_paid) {
+                    agingClass = 'badge-pago';
+                    agingText = 'Pago';
+                } else if (daysOver > 30) {
+                    agingClass = 'badge-critico';
+                    agingText = daysOver + 'd atraso';
+                } else if (daysOver > 0) {
+                    agingClass = 'badge-alerta';
+                    agingText = daysOver + 'd atraso';
+                } else {
+                    agingText = Math.abs(daysOver) + 'd restantes';
+                }
+            %>
             <tr>
                 <td style="text-align: center;">
                     <button class="btn-check <%= inv.is_paid ? 'paid' : '' %>" onclick="togglePaid(<%= inv.id %>, this)">
@@ -27,6 +45,9 @@
                     <div style="font-size: 0.8rem; color: #999;"><%= inv.doc %></div>
                 </td>
                 <td style="font-weight: 700;"><%= formatMoney(inv.total_value) %></td>
+                <td style="text-align: center;">
+                    <span class="badge <%= agingClass %>"><%= agingText %></span>
+                </td>
                 <td>
                     <span class="status-dot <%= inv.status === 'Autorizada' ? 'dot-green' : 'dot-red' %>"></span>
                     <select class="status-select" onchange="updateStatus(<%= inv.id %>, this.value)">

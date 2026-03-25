@@ -293,6 +293,143 @@ table.dataTable tbody td {
     border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
+/* Aging Badges */
+.badge-critico {
+    background: rgba(255, 59, 48, 0.12);
+    color: #ff3b30;
+    border: 1px solid rgba(255, 59, 48, 0.25);
+}
+
+.badge-alerta {
+    background: rgba(255, 204, 0, 0.15);
+    color: #b38f00;
+    border: 1px solid rgba(255, 204, 0, 0.3);
+}
+
+.badge-noprazo {
+    background: rgba(52, 199, 89, 0.12);
+    color: #248a3d;
+    border: 1px solid rgba(52, 199, 89, 0.25);
+}
+
+.badge-pago {
+    background: rgba(0, 122, 255, 0.1);
+    color: #007aff;
+    border: 1px solid rgba(0, 122, 255, 0.2);
+}
+
+/* KPI Bordered Cards */
+.kpi-bordered {
+    border-left: 4px solid transparent;
+    transition: all 0.2s;
+}
+
+.kpi-bordered.border-critico { border-left-color: #ff3b30; }
+.kpi-bordered.border-alerta { border-left-color: #ffcc00; }
+.kpi-bordered.border-noprazo { border-left-color: #34c759; }
+
+/* Cobrança Cards */
+.cobranca-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid white;
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    transition: all 0.2s;
+}
+
+.cobranca-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+.cobranca-total {
+    background: rgba(255, 59, 48, 0.06);
+    border-radius: 14px;
+    padding: 12px;
+    text-align: center;
+    margin: 12px 0;
+}
+
+.cobranca-total .amount {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #ff3b30;
+}
+
+.cobranca-nota {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    font-size: 0.85rem;
+}
+
+.cobranca-nota:last-child { border-bottom: none; }
+
+/* PDCA Section */
+.pdca-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid white;
+    border-radius: 16px;
+    padding: 14px 18px;
+    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    transition: all 0.15s;
+}
+
+.pdca-card:hover {
+    transform: translateX(4px);
+}
+
+.pdca-header {
+    border-top: 3px solid;
+    border-radius: 24px;
+}
+
+.pdca-header.pdca-urgencia { border-top-color: #ff3b30; }
+.pdca-header.pdca-curva-a { border-top-color: #5856d6; }
+.pdca-header.pdca-juridico { border-top-color: #1d1d1f; }
+
+/* Btn copy */
+.btn-copy {
+    background: linear-gradient(135deg, #ff3b30, #ff6b6b);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+    transition: all 0.2s;
+}
+
+.btn-copy:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(255, 59, 48, 0.4);
+}
+
+/* Aging chart scroll */
+.chart-scroll {
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.chart-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chart-scroll::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
 .pill {
     padding: 4px 12px;
     border-radius: 20px;

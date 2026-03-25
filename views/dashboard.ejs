@@ -1,4 +1,4 @@
-<% const { kpi, timeline, topCustomers, mapData } = pageData; %>
+<% const { kpi, timeline, topCustomers, mapData, aging, priorityChart } = pageData; %>
 
 <div class="grid">
     <div class="glass-card col-3">
@@ -22,10 +22,53 @@
     </div>
 </div>
 
+<!-- Aging KPIs -->
+<div class="grid">
+    <div class="glass-card col-4 kpi-bordered border-critico">
+        <div class="kpi-label" style="color: var(--danger);">
+            <i class="fa-solid fa-triangle-exclamation"></i> Atraso Crítico (> 30 dias)
+        </div>
+        <div class="kpi-val" style="color: var(--danger);"><%= formatMoney(aging.critico_val || 0) %></div>
+        <div class="kpi-trend trend-down"><%= aging.critico_count || 0 %> notas vencidas</div>
+    </div>
+    <div class="glass-card col-4 kpi-bordered border-alerta">
+        <div class="kpi-label" style="color: #b38f00;">
+            <i class="fa-solid fa-clock"></i> Atraso Leve (1 a 30 dias)
+        </div>
+        <div class="kpi-val" style="color: #b38f00;"><%= formatMoney(aging.alerta_val || 0) %></div>
+        <div class="kpi-trend"><%= aging.alerta_count || 0 %> notas em alerta</div>
+    </div>
+    <div class="glass-card col-4 kpi-bordered border-noprazo">
+        <div class="kpi-label" style="color: var(--success);">
+            <i class="fa-solid fa-check-circle"></i> No Prazo / A Vencer
+        </div>
+        <div class="kpi-val" style="color: var(--success);"><%= formatMoney(aging.noprazo_val || 0) %></div>
+        <div class="kpi-trend trend-up"><%= aging.noprazo_count || 0 %> notas no prazo</div>
+    </div>
+</div>
+
+<!-- Priority Chart + Top Customers -->
 <div class="grid">
     <div class="glass-card col-8">
-        <div class="kpi-label">Fluxo de Caixa (Emissões)</div>
-        <canvas id="chartTimeline" height="100"></canvas>
+        <div class="kpi-label">
+            <i class="fa-solid fa-ranking-star"></i> Prioridade de Cobrança por Cliente (Pendentes)
+        </div>
+        <div style="display: flex; gap: 16px; margin: 10px 0 0;">
+            <span style="font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                <span style="width:10px;height:10px;background:#ff3b30;border-radius:2px;display:inline-block;"></span> Crítico
+            </span>
+            <span style="font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                <span style="width:10px;height:10px;background:#ffcc00;border-radius:2px;display:inline-block;"></span> Alerta
+            </span>
+            <span style="font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                <span style="width:10px;height:10px;background:#34c759;border-radius:2px;display:inline-block;"></span> No Prazo
+            </span>
+        </div>
+        <div class="chart-scroll" style="height: 420px; margin-top: 10px;">
+            <div style="height: <%= Math.max(300, (priorityChart || []).length * 38) %>px; position: relative;">
+                <canvas id="chartPriority"></canvas>
+            </div>
+        </div>
     </div>
     <div class="glass-card col-4">
         <div class="kpi-label">Top 5 Clientes</div>
@@ -34,13 +77,48 @@
 </div>
 
 <div class="grid">
-    <div class="glass-card col-12">
+    <div class="glass-card col-8">
+        <div class="kpi-label">Fluxo de Caixa (Emissões)</div>
+        <canvas id="chartTimeline" height="100"></canvas>
+    </div>
+    <div class="glass-card col-4">
         <div class="kpi-label">Mapa de Calor Geográfico</div>
         <div id="map"></div>
     </div>
 </div>
 
 <script>
+    // Priority Chart (Horizontal Stacked Bar)
+    const priorityData = <%- JSON.stringify(priorityChart || []) %>;
+    if(priorityData.length > 0) {
+        new Chart(document.getElementById('chartPriority').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: priorityData.map(c => {
+                    const name = c.customer_name || '';
+                    return name.length > 25 ? name.substring(0, 25) + '...' : name;
+                }),
+                datasets: [
+                    { label: 'Crítico (>30d)', data: priorityData.map(c => parseFloat(c.critico)), backgroundColor: '#ff3b30' },
+                    { label: 'Alerta (1-30d)', data: priorityData.map(c => parseFloat(c.alerta)), backgroundColor: '#ffcc00' },
+                    { label: 'No Prazo', data: priorityData.map(c => parseFloat(c.noprazo)), backgroundColor: '#34c759' }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { stacked: true, grid: { borderDash: [5, 5] }, ticks: {
+                        callback: function(v) { return 'R$ ' + (v/1000).toFixed(0) + 'k'; }
+                    }},
+                    y: { stacked: true, grid: { display: false } }
+                }
+            }
+        });
+    }
+
     // Timeline Chart
     const timelineData = <%- JSON.stringify(timeline) %>;
     const ctx = document.getElementById('chartTimeline').getContext('2d');

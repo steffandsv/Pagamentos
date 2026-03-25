@@ -1,0 +1,186 @@
+<% const { criticalDebtors, curvaA, cronicos, totalCriticoVal, totalCriticoCount } = pageData; %>
+
+<!-- Header KPIs -->
+<div class="grid">
+    <div class="glass-card col-6 kpi-bordered border-critico">
+        <div class="kpi-label" style="color: var(--danger);">
+            <i class="fa-solid fa-fire"></i> Total Crítico Pendente
+        </div>
+        <div class="kpi-val" style="color: var(--danger);"><%= formatMoney(totalCriticoVal) %></div>
+        <div class="kpi-trend trend-down"><%= totalCriticoCount %> notas com > 30 dias de atraso</div>
+    </div>
+    <div class="glass-card col-6">
+        <div class="kpi-label">Devedores Únicos em Estágio Crítico</div>
+        <div class="kpi-val"><%= criticalDebtors.length %></div>
+        <div class="kpi-trend">Clientes precisam de ação imediata</div>
+    </div>
+</div>
+
+<!-- Critical Debtors Cards -->
+<div class="glass-card" style="border-top: 3px solid var(--danger);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+            <div class="kpi-label" style="color: var(--danger); font-size: 1rem; margin-bottom: 4px;">
+                <i class="fa-solid fa-triangle-exclamation"></i> Ação Imediata — Devedores Críticos
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                Clientes com mais de 30 dias de atraso. Notas pagas não aparecem aqui.
+            </p>
+        </div>
+        <button class="btn-copy" onclick="copiarRoteiro()">
+            <i class="fa-solid fa-clipboard"></i> Copiar Roteiro
+        </button>
+    </div>
+
+    <% if (criticalDebtors.length === 0) { %>
+        <div style="text-align: center; padding: 60px; color: var(--text-secondary);">
+            <i class="fa-solid fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 16px; display: block;"></i>
+            <p style="font-weight: 600; font-size: 1.1rem;">Nenhum devedor em estágio crítico!</p>
+            <p>Todas as faturas com mais de 30 dias estão quitadas.</p>
+        </div>
+    <% } else { %>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+            <% criticalDebtors.forEach(function(debtor) { %>
+            <div class="cobranca-card">
+                <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<%= debtor.name %>">
+                    <%= debtor.name %>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">
+                    <%= debtor.doc %><% if (debtor.city) { %> · <%= debtor.city %>/<%= debtor.uf %><% } %>
+                </div>
+                <div class="cobranca-total">
+                    <div class="amount"><%= formatMoney(debtor.total) %></div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;"><%= debtor.invoices.length %> nota(s) em atraso</div>
+                </div>
+                <div style="max-height: 120px; overflow-y: auto;">
+                    <% debtor.invoices.forEach(function(inv) { %>
+                    <div class="cobranca-nota">
+                        <span>
+                            <% if (inv.number === 'S/N' || !inv.number) { %>
+                                <span class="badge badge-critico" style="font-size: 0.65rem;">S/N</span>
+                            <% } else { %>
+                                NF <%= inv.number %>
+                            <% } %>
+                            <span style="color: var(--text-secondary); margin-left: 4px;"><%= inv.days_overdue %>d</span>
+                        </span>
+                        <span style="font-weight: 700; color: var(--danger);"><%= formatMoney(inv.total_value) %></span>
+                    </div>
+                    <% }); %>
+                </div>
+            </div>
+            <% }); %>
+        </div>
+    <% } %>
+</div>
+
+<!-- PDCA Section -->
+<div class="grid" style="margin-top: 20px;">
+    <div class="glass-card col-12">
+        <div class="kpi-label" style="font-size: 1rem; margin-bottom: 16px;">
+            <i class="fa-solid fa-bullseye"></i> Diretrizes de Ação — Régua B2G (Ciclo PDCA)
+        </div>
+        <div class="grid" style="margin-bottom: 0;">
+            <div class="glass-card col-4" style="background: rgba(0, 122, 255, 0.03); margin-bottom: 0;">
+                <span class="badge badge-pago" style="margin-bottom: 8px; display: inline-block; font-size: 0.7rem;">PLAN (Preventivo)</span>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0;">Contato preventivo 5 dias antes do vencimento para alinhar o pagamento.</p>
+            </div>
+            <div class="glass-card col-4" style="background: rgba(255, 204, 0, 0.03); margin-bottom: 0;">
+                <span class="badge badge-alerta" style="margin-bottom: 8px; display: inline-block; font-size: 0.7rem;">DO (Ativa)</span>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0;">Cobrança ativa a cada 7 dias de atraso. Registrar todas as interações.</p>
+            </div>
+            <div class="glass-card col-4" style="background: rgba(255, 59, 48, 0.03); margin-bottom: 0;">
+                <span class="badge badge-critico" style="margin-bottom: 8px; display: inline-block; font-size: 0.7rem;">CHECK & ACT</span>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0;">Reunião Semanal de Fluxo. Acionamento Jurídico para > 90 dias.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <!-- Curva A -->
+    <div class="glass-card col-6 pdca-header pdca-curva-a">
+        <div class="kpi-label" style="margin-bottom: 16px;">
+            <i class="fa-solid fa-star"></i> Faturas Curva A (> R$ 5.000)
+        </div>
+        <div style="max-height: 300px; overflow-y: auto;">
+            <% if ((curvaA || []).length === 0) { %>
+                <p style="color: var(--text-secondary); font-style: italic; padding: 20px 0; text-align: center;">Nenhuma fatura pendente acima de R$ 5.000.</p>
+            <% } else { %>
+                <% curvaA.forEach(function(item) { %>
+                <div class="pdca-card">
+                    <div>
+                        <div style="font-weight: 700; font-size: 0.85rem;"><%= item.name %></div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                            NF: <%= item.number || 'S/N' %>
+                            <% if (item.days_overdue > 0) { %>
+                                · <span style="color: var(--danger);"><%= item.days_overdue %>d atraso</span>
+                            <% } %>
+                        </div>
+                    </div>
+                    <div style="font-weight: 800; font-size: 0.95rem;"><%= formatMoney(item.total_value) %></div>
+                </div>
+                <% }); %>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Jurídico -->
+    <div class="glass-card col-6 pdca-header pdca-juridico">
+        <div class="kpi-label" style="margin-bottom: 16px;">
+            <i class="fa-solid fa-scale-balanced"></i> Ação Jurídica (Crônicos > 90 dias)
+        </div>
+        <div style="max-height: 300px; overflow-y: auto;">
+            <% if ((cronicos || []).length === 0) { %>
+                <p style="color: var(--text-secondary); font-style: italic; padding: 20px 0; text-align: center;">Nenhum devedor crônico (> 90 dias).</p>
+            <% } else { %>
+                <% cronicos.forEach(function(item) { %>
+                <div class="pdca-card">
+                    <div>
+                        <div style="font-weight: 700; font-size: 0.85rem;"><%= item.name %></div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                            <%= item.city || '' %><%= item.uf ? '/' + item.uf : '' %> ·
+                            <span style="color: var(--danger); font-weight: 700;"><%= item.days_overdue %> dias</span>
+                        </div>
+                    </div>
+                    <div style="font-weight: 800; font-size: 0.95rem;"><%= formatMoney(item.total_value) %></div>
+                </div>
+                <% }); %>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<textarea id="roteiro-text" style="position:absolute;left:-9999px;"></textarea>
+
+<script>
+function copiarRoteiro() {
+    const debtors = <%- JSON.stringify(criticalDebtors) %>;
+    let text = '==========================================================\n';
+    text += 'RELATÓRIO DE AÇÃO IMEDIATA - DEVEDORES CRÍTICOS\n';
+    text += '==========================================================\n\n';
+    
+    debtors.forEach(d => {
+        text += `CLIENTE: ${d.name}\n`;
+        text += `DOC: ${d.doc}\n`;
+        d.invoices.forEach(inv => {
+            text += ` NF: ${inv.number || 'S/N'} | Valor: R$ ${parseFloat(inv.total_value).toFixed(2)} | Atraso: ${inv.days_overdue} dias\n`;
+        });
+        text += `TOTAL: R$ ${d.total.toFixed(2)}\n\n`;
+    });
+
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.querySelector('.btn-copy');
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Copiado!';
+            btn.style.background = 'linear-gradient(135deg, #34c759, #30d158)';
+            btn.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.3)';
+            setTimeout(() => {
+                btn.innerHTML = original;
+                btn.style.background = '';
+                btn.style.boxShadow = '';
+            }, 2500);
+        });
+    }
+}
+</script>
