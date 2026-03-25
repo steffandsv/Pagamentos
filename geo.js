@@ -4,6 +4,16 @@
 const fs = require('fs');
 const path = require('path');
 
+// Mapeamento codigo_uf (IBGE) → sigla UF
+const UF_CODE_TO_SIGLA = {
+  11: 'RO', 12: 'AC', 13: 'AM', 14: 'RR', 15: 'PA', 16: 'AP', 17: 'TO',
+  21: 'MA', 22: 'PI', 23: 'CE', 24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL',
+  28: 'SE', 29: 'BA',
+  31: 'MG', 32: 'ES', 33: 'RJ', 35: 'SP',
+  41: 'PR', 42: 'SC', 43: 'RS',
+  50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF'
+};
+
 class GeoIntelligence {
   constructor() {
     this.municipalities = {};
@@ -33,7 +43,7 @@ class GeoIntelligence {
               lat: parseFloat(m.latitude),
               lon: parseFloat(m.longitude),
               nome: m.nome,
-              uf: m.codigo_uf
+              uf: UF_CODE_TO_SIGLA[m.codigo_uf] || String(m.codigo_uf)
             };
           }
         }
