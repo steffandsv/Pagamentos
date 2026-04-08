@@ -190,6 +190,9 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
         });
 
         for (const entry of zipEntries) {
+          // Antiestrangulamento do event loop (evita ETIMEDOUT em outras requisições)
+          await new Promise(resolve => setImmediate(resolve));
+
           if (entry.isDirectory) continue;
           const raw = entry.getData().toString('utf-8');
           if (!raw.trim()) continue;
@@ -223,12 +226,17 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
           }
 
           // --- Handle NF-e ---
-          if (!xml.nfeProc) continue;
+          const nfeNode = xml.nfeProc?.NFe || xml.NFe;
+          if (!nfeNode) continue;
 
-          const inf = xml.nfeProc.NFe?.infNFe;
+          const inf = nfeNode.infNFe;
           if (!inf) continue;
 
-          const ch = String(xml.nfeProc.protNFe?.infProt?.chNFe || '');
+          // Extrair chave de acesso (do protNFe ou do Id da infNFe)
+          let ch = String(xml.nfeProc?.protNFe?.infProt?.chNFe || '');
+          if (!ch && inf['@_Id']) {
+            ch = inf['@_Id'].replace(/^NFe/, '');
+          }
           if (!ch) continue;
 
           // 1. Company
@@ -280,16 +288,19 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
             count++;
             // 4. Items
             const items = inf.det || [];
-            for (const d of items) {
-              const ncm = String(d.prod?.NCM || '');
-              const desc = String(d.prod?.xProd || '');
-              const qty = parseFloat(d.prod?.qCom) || 0;
-              const vUn = parseFloat(d.prod?.vUnCom) || 0;
-              const vTot = parseFloat(d.prod?.vProd) || 0;
+            if (items.length > 0) {
+              const insertData = items.map(d => {
+                const ncm = String(d.prod?.NCM || '');
+                const desc = String(d.prod?.xProd || '');
+                const qty = parseFloat(d.prod?.qCom) || 0;
+                const vUn = parseFloat(d.prod?.vUnCom) || 0;
+                const vTot = parseFloat(d.prod?.vProd) || 0;
+                return [invoiceId, ncm, desc, qty, vUn, vTot];
+              });
 
               await conn.query(
-                'INSERT INTO invoice_items (invoice_id, ncm, description, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?, ?)',
-                [invoiceId, ncm, desc, qty, vUn, vTot]
+                'INSERT INTO invoice_items (invoice_id, ncm, description, quantity, unit_price, total_price) VALUES ?',
+                [insertData]
               );
             }
           }
