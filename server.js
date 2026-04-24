@@ -187,6 +187,7 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
           ignoreAttributes: false,
           attributeNamePrefix: '@_',
           removeNSPrefix: true,
+          parseTagValue: false,
           isArray: (name) => {
             // det (items) must always be an array
             return name === 'det';
