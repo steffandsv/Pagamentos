@@ -26,7 +26,9 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME || 'financial_vision',
   waitForConnections: true,
   connectionLimit: 10,
-  charset: 'utf8mb4'
+  charset: 'utf8mb4',
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
 });
 
 // --- Middleware ---
@@ -175,6 +177,7 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
       const zip = new AdmZip(req.file.path);
       const zipEntries = zip.getEntries();
       let count = 0;
+      let countAlreadyExists = 0;
       const conn = await pool.getConnection();
 
       try {
@@ -183,6 +186,7 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
         const parser = new XMLParser({
           ignoreAttributes: false,
           attributeNamePrefix: '@_',
+          removeNSPrefix: true,
           isArray: (name) => {
             // det (items) must always be an array
             return name === 'det';
@@ -194,7 +198,8 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
           await new Promise(resolve => setImmediate(resolve));
 
           if (entry.isDirectory) continue;
-          const raw = entry.getData().toString('utf-8');
+          let raw = entry.getData().toString('utf-8');
+          raw = raw.replace(/^\uFEFF/, ''); // Remove BOM se existir
           if (!raw.trim()) continue;
 
           let xml;
@@ -303,11 +308,17 @@ app.post('/upload', upload.single('f1'), async (req, res) => {
                 [insertData]
               );
             }
+          } else {
+            countAlreadyExists++;
           }
         }
 
         await conn.commit();
-        uploadMessage = `Sucesso! ${count} notas processadas.`;
+        let msg = `Sucesso! ${count} notas processadas.`;
+        if (countAlreadyExists > 0) {
+          msg += ` (${countAlreadyExists} já existiam no banco e foram ignoradas).`;
+        }
+        uploadMessage = msg;
       } catch (e) {
         await conn.rollback();
         uploadMessage = 'Erro: ' + e.message;
