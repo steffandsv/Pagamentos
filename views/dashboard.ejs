@@ -78,7 +78,14 @@
 
 <div class="grid">
     <div class="glass-card col-8">
-        <div class="kpi-label">Fluxo de Caixa (Emissões)</div>
+        <div class="kpi-label" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Fluxo de Caixa (Emissões)</span>
+            <select id="timelineViewSelect" style="padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.1); color: inherit; font-size: 0.9rem; cursor: pointer; outline: none;">
+                <option value="monthly" style="color: #000;">Mensal</option>
+                <option value="weekly" style="color: #000;">Semanal</option>
+                <option value="daily" style="color: #000;">Diário</option>
+            </select>
+        </div>
         <canvas id="chartTimeline" height="100"></canvas>
     </div>
     <div class="glass-card col-4">
@@ -120,15 +127,43 @@
     }
 
     // Timeline Chart
-    const timelineData = <%- JSON.stringify(timeline) %>;
+    const rawTimelineData = <%- JSON.stringify(timeline) %>;
+    
+    function getWeekString(dateString) {
+        const d = new Date(dateString);
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+        const weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
+        return d.getUTCFullYear() + "-W" + String(weekNo).padStart(2, '0');
+    }
+
+    function processTimelineData(view) {
+        const aggregated = {};
+        for (const [dateStr, val] of Object.entries(rawTimelineData)) {
+            let key = dateStr;
+            if (view === 'monthly') {
+                key = dateStr.substring(0, 7); // YYYY-MM
+            } else if (view === 'weekly') {
+                key = getWeekString(dateStr);
+            }
+            if (!aggregated[key]) aggregated[key] = 0;
+            aggregated[key] += parseFloat(val);
+        }
+        const sortedKeys = Object.keys(aggregated).sort();
+        return {
+            labels: sortedKeys,
+            data: sortedKeys.map(k => aggregated[k])
+        };
+    }
+
     const ctx = document.getElementById('chartTimeline').getContext('2d');
-    new Chart(ctx, {
+    let timelineChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: Object.keys(timelineData),
+            labels: [],
             datasets: [{
                 label: 'Faturamento',
-                data: Object.values(timelineData),
+                data: [],
                 borderColor: '#007aff',
                 backgroundColor: 'rgba(0, 122, 255, 0.1)',
                 borderWidth: 2,
@@ -143,10 +178,47 @@
             plugins: { legend: { display: false } },
             scales: {
                 x: { grid: { display: false } },
-                y: { grid: { borderDash: [5, 5] } }
+                y: { grid: { borderDash: [5, 5] }, ticks: {
+                    callback: function(v) { return 'R$ ' + (v/1000).toFixed(0) + 'k'; }
+                }}
             }
         }
     });
+
+    function updateTimelineChart(view) {
+        const processed = processTimelineData(view);
+        
+        const formattedLabels = processed.labels.map(label => {
+            if (view === 'monthly') {
+                const parts = label.split('-');
+                if (parts.length === 2) {
+                    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                    return months[parseInt(parts[1]) - 1] + '/' + parts[0];
+                }
+            } else if (view === 'daily') {
+                const parts = label.split('-');
+                if (parts.length === 3) return parts[2] + '/' + parts[1];
+            } else if (view === 'weekly') {
+                const parts = label.split('-W');
+                if (parts.length === 2) return 'Sem ' + parts[1] + '/' + parts[0];
+            }
+            return label;
+        });
+
+        timelineChart.data.labels = formattedLabels;
+        timelineChart.data.datasets[0].data = processed.data;
+        timelineChart.update();
+    }
+
+    const timelineSelect = document.getElementById('timelineViewSelect');
+    if (timelineSelect) {
+        timelineSelect.addEventListener('change', function(e) {
+            updateTimelineChart(e.target.value);
+        });
+    }
+    
+    // Initialize with monthly view
+    updateTimelineChart('monthly');
 
     // Top Customers Chart
     const topCust = <%- JSON.stringify(topCustomers) %>;
